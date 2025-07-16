@@ -1,5 +1,6 @@
 use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, VecDeque};
+use std::vec;
 
 use geo_traits::{CoordTrait, RectTrait};
 
@@ -80,6 +81,7 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
 
         let mut outer_node_index = boxes.len().checked_sub(4);
 
+        // let mut queue = VecDeque::with_capacity(self.node_size() as usize * self.num_levels());
         let mut queue = vec![];
         let mut results = vec![];
 
@@ -91,22 +93,52 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
             // search through child nodes
             for pos in (node_index..end).step_by(4) {
                 // check if node bbox intersects with query bbox
-                if max_x < boxes[pos] {
-                    continue; // maxX < nodeMinX
+                // unsafe {
+                //     if max_x < *boxes.get_unchecked(pos) {
+                //         continue; // maxX < nodeMinX
+                //     }
+                //     if max_y < *boxes.get_unchecked(pos + 1) {
+                //         continue; // maxY < nodeMinY
+                //     }
+                //     if min_x > *boxes.get_unchecked(pos + 2) {
+                //         continue; // minX > nodeMaxX
+                //     }
+                //     if min_y > *boxes.get_unchecked(pos + 3) {
+                //         continue; // minY > nodeMaxY
+                //     }
+                // }
+
+                // Unchecked access and avoiding branching is the key to performance.
+                let (node_min_x, node_min_y, node_max_x, node_max_y) = unsafe {
+                    let node_min_x = *boxes.get_unchecked(pos);
+                    let node_min_y = *boxes.get_unchecked(pos + 1);
+                    let node_max_x = *boxes.get_unchecked(pos + 2);
+                    let node_max_y = *boxes.get_unchecked(pos + 3);
+                    (node_min_x, node_min_y, node_max_x, node_max_y)
+                };
+
+                if max_x < node_min_x || max_y < node_min_y || min_x > node_max_x || min_y > node_max_y {
+                    continue;
                 }
-                if max_y < boxes[pos + 1] {
-                    continue; // maxY < nodeMinY
-                }
-                if min_x > boxes[pos + 2] {
-                    continue; // minX > nodeMaxX
-                }
-                if min_y > boxes[pos + 3] {
-                    continue; // minY > nodeMaxY
-                }
+
+                // assert!(pos + 3 < boxes.len());
+
+                // let (node_min_x, node_min_y, node_max_x, node_max_y) = {
+                //     let node_min_x = boxes[pos];
+                //     let node_min_y = boxes[pos + 1];
+                //     let node_max_x = boxes[pos + 2];
+                //     let node_max_y = boxes[pos + 3];
+                //     (node_min_x, node_min_y, node_max_x, node_max_y)
+                // };
+
+                // if max_x < node_min_x || max_y < node_min_y || min_x > node_max_x || min_y > node_max_y {
+                //     continue;
+                // }
 
                 let index = indices.get(pos >> 2);
 
                 if node_index >= self.num_items() as usize * 4 {
+                    // queue.push_back(index); // node; add it to the search queue
                     queue.push(index); // node; add it to the search queue
                 } else {
                     // Since the max items of the index is u32, we can coerce to u32
@@ -114,6 +146,7 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
                 }
             }
 
+            // outer_node_index = queue.pop_front();
             outer_node_index = queue.pop();
         }
 
