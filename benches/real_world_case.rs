@@ -159,20 +159,10 @@ fn dataset_to_query_boxes(boxes_buf: &[f64]) -> Vec<(f64, f64, f64, f64)> {
         .collect()
 }
 
-/// Table-driven real world benchmarks  
-pub fn real_world_benchmarks(c: &mut Criterion) {
+pub fn benchmark_construction(c: &mut Criterion) {
     for config in BENCHMARK_CONFIGS {
         let index_dataset = config.index_dataset;
-        let query_dataset = config.query_dataset;
-        let name_suffix = config.name_suffix;
-        let queries_per_iter = config.queries_per_iter;
-
         let index_data = load_dataset(index_dataset);
-        let query_data = load_dataset(query_dataset);
-        let mut query_boxes = dataset_to_query_boxes(&query_data);
-        let mut rng = thread_rng();
-        query_boxes.shuffle(&mut rng);
-        let mut query_boxes_iter = WrapAroundQueryBoxIter::new(&query_boxes);
 
         // Construction benchmarks
         c.bench_function(
@@ -194,6 +184,22 @@ pub fn real_world_benchmarks(c: &mut Criterion) {
             &format!("construction_{}_str_f32", index_dataset.name),
             |b| b.iter(|| construct_rtree_str_f32_with_cast(&index_data)),
         );
+    }
+}
+
+pub fn benchmark_search(c: &mut Criterion) {
+    for config in BENCHMARK_CONFIGS {
+        let index_dataset = config.index_dataset;
+        let query_dataset = config.query_dataset;
+        let name_suffix = config.name_suffix;
+        let queries_per_iter = config.queries_per_iter;
+
+        let index_data = load_dataset(index_dataset);
+        let query_data = load_dataset(query_dataset);
+        let mut query_boxes = dataset_to_query_boxes(&query_data);
+        let mut rng = thread_rng();
+        query_boxes.shuffle(&mut rng);
+        let mut query_boxes_iter = WrapAroundQueryBoxIter::new(&query_boxes);
 
         // Search benchmarks with OnceCell for lazy, one-time index construction
         let hilbert_f64_index: OnceCell<RTree<f64>> = OnceCell::new();
@@ -249,10 +255,20 @@ pub fn real_world_benchmarks(c: &mut Criterion) {
 }
 
 criterion_group! {
-    name = benches;
+    name = benches_search;
     config = Criterion::default()
         .measurement_time(Duration::from_secs(10))
         .warm_up_time(Duration::from_secs(3));
-    targets = real_world_benchmarks
+    targets = benchmark_search
 }
-criterion_main!(benches);
+
+criterion_group! {
+    name = benches_construction;
+    config = Criterion::default()
+        .measurement_time(Duration::from_secs(10))
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(3));
+    targets = benchmark_construction
+}
+
+criterion_main!(benches_search, benches_construction);

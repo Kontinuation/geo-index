@@ -40,3 +40,6 @@ harness = false
 [[bench]]
 name = "real_world_case"
 harness = false
+
+[profile.release]
+debug = true
