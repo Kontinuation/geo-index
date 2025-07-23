@@ -19,6 +19,10 @@ struct Args {
     /// Path to input .raw file
     input: String,
 
+    /// Layer to dump
+    #[arg(short = 'l', long, default_value_t = 1)]
+    layer: usize,
+
     /// Output file (WKT), if not present, print to stdout
     #[arg(short = 'o', long)]
     output: Option<String>,
@@ -92,7 +96,7 @@ fn main() {
 
     println!("index: {:?}", index.metadata());
     writeln!(writer, "bbox").unwrap();
-    for box_ in index.boxes_at_level(1).unwrap().chunks(4) {
+    for box_ in index.boxes_at_level(args.layer).unwrap().chunks(4) {
         writeln!(
             writer,
             "\"{}\"",
