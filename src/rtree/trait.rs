@@ -117,7 +117,11 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
                     (node_min_x, node_min_y, node_max_x, node_max_y)
                 };
 
-                if max_x < node_min_x || max_y < node_min_y || min_x > node_max_x || min_y > node_max_y {
+                if max_x < node_min_x
+                    || max_y < node_min_y
+                    || min_x > node_max_x
+                    || min_y > node_max_y
+                {
                     continue;
                 }
 

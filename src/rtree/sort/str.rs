@@ -47,8 +47,7 @@ impl<N: IndexableNum> Sort<N> for STRSort {
 
         let num_leaf_nodes = (params.num_items as f64 / params.node_size as f64).ceil();
         let num_vertical_slices = num_leaf_nodes.sqrt().ceil() as usize;
-        let num_items_per_slice =
-            (params.num_items as f64 / num_vertical_slices as f64).ceil() as usize;
+        let num_items_per_slice = num_vertical_slices * params.node_size;
 
         #[cfg(feature = "rayon")]
         {
@@ -83,16 +82,18 @@ impl<N: IndexableNum> Sort<N> for STRSort {
         {
             for i in 0..num_vertical_slices {
                 let partition_start = i * num_items_per_slice;
-                let partition_end = (i + 1) * num_items_per_slice;
-                // Within each x partition, sort by y values
-                sort(
-                    &mut center_values,
-                    boxes,
-                    indices,
-                    partition_start,
-                    partition_end.min(params.num_items) - 1,
-                    params.node_size,
-                );
+                let partition_end = ((i + 1) * num_items_per_slice).min(params.num_items) - 1;
+                if partition_start <= partition_end {
+                    // Within each x partition, sort by y values
+                    sort(
+                        &mut center_values,
+                        boxes,
+                        indices,
+                        partition_start,
+                        partition_end,
+                        params.node_size,
+                    );
+                }
             }
         }
     }
