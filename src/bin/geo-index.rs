@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use wkt::ToWkt;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about = "Tool for dumping bounding boxes from a spatial index.")]
 struct Args {
     /// Tree type: hilbert or str
     #[arg(short = 't', long, value_enum)]
@@ -19,8 +19,8 @@ struct Args {
     /// Path to input .raw file
     input: String,
 
-    /// Layer to dump
-    #[arg(short = 'l', long, default_value_t = 1)]
+    /// Layer to dump. the base layer is 0, the next layer is 1, etc.
+    #[arg(short = 'l', long, default_value_t = 0)]
     layer: usize,
 
     /// Output file (WKT), if not present, print to stdout
