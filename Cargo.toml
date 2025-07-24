@@ -14,7 +14,7 @@ categories = ["data-structures", "algorithms", "science::geo"]
 
 [dependencies]
 bytemuck = "1"
-clap = { version = "4.5.41", features = ["derive"] }
+clap = { version = "4.5.30", features = ["derive"] }
 float_next_after = "1"
 geo-traits = "0.3"
 geo-types = "0.7.16"
