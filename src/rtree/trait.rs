@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, VecDeque};
-use std::vec;
+use std::{usize, vec};
 
 use geo_traits::{CoordTrait, RectTrait};
 
@@ -73,22 +73,52 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
     ///
     /// Results are the indexes of the inserted objects in insertion order.
     fn search(&self, min_x: N, min_y: N, max_x: N, max_y: N) -> Vec<u32> {
-        let boxes = self.boxes();
         let indices = self.indices();
+        match indices {
+            Indices::U16(indices_slice) => {
+                self._do_search(indices_slice, min_x, min_y, max_x, max_y)
+            }
+            Indices::U32(indices_slice) => {
+                self._do_search(indices_slice, min_x, min_y, max_x, max_y)
+            }
+        }
+    }
+
+    /// Internal implementation of search.
+    ///
+    /// This is a generic implementation that can be used for both u16 and u32 indices.
+    /// It's used to avoid code duplication and improve performance.
+    fn _do_search<T: IndexableNum>(
+        &self,
+        indices: &[T],
+        min_x: N,
+        min_y: N,
+        max_x: N,
+        max_y: N,
+    ) -> Vec<u32> {
+        let boxes = self.boxes();
         if boxes.is_empty() {
             return vec![];
         }
 
-        let mut outer_node_index = boxes.len().checked_sub(4);
+        let mut node_index;
+        let mut end;
+        if let Some(index) = boxes.len().checked_sub(4) {
+            node_index = index;
+            end = (index + self.node_size() as usize * 4)
+                .min(upper_bound(index, self.level_bounds()));
+        } else {
+            return vec![];
+        }
+
+        // index and end of prefetched node. Will be valid values after the first iteration.
+        let mut prefetched_node_index: usize = usize::MAX;
+        let mut prefetched_node_end: usize = 0;
 
         let mut queue = VecDeque::with_capacity(self.node_size() as usize);
         let mut results = vec![];
 
-        while let Some(node_index) = outer_node_index {
-            // find the end index of the node
-            let end = (node_index + self.node_size() as usize * 4)
-                .min(upper_bound(node_index, self.level_bounds()));
-
+        loop {
             // search through child nodes
             for pos in (node_index..end).step_by(4) {
                 // Safety: pos was checked before to be within bounds
@@ -110,17 +140,47 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
                     continue;
                 }
 
-                let index = indices.get(pos >> 2);
+                let index = unsafe { *indices.get_unchecked(pos >> 2) };
 
                 if node_index >= self.num_items() as usize * 4 {
-                    queue.push_back(index); // node; add it to the search queue
+                    queue.push_back(index.to_usize().unwrap()); // node; add it to the search queue
                 } else {
                     // Since the max items of the index is u32, we can coerce to u32
-                    results.push(index.try_into().unwrap()); // leaf item
+                    results.push(index.to_u32().unwrap()); // leaf item
                 }
             }
 
-            outer_node_index = queue.pop_front();
+            // Go to the next node
+            if prefetched_node_index != usize::MAX {
+                // If there's already a prefetched node, assign outer_node_index to that node.
+                node_index = prefetched_node_index;
+                end = prefetched_node_end;
+            } else {
+                // Otherwise, pop the next node from the queue as the outer_node_index
+                if let Some(index) = queue.pop_front() {
+                    node_index = index;
+                    end = (index + self.node_size() as usize * 4)
+                        .min(upper_bound(index, self.level_bounds()));
+                } else {
+                    break;
+                }
+            }
+
+            // Prefetch the next-next node
+            if let Some(index) = queue.pop_front() {
+                prefetched_node_index = index;
+                prefetched_node_end = (index + self.node_size() as usize * 4)
+                    .min(upper_bound(index, self.level_bounds()));
+                self.prefetch_entire_node_with_end(
+                    prefetched_node_index,
+                    prefetched_node_end,
+                    boxes,
+                    indices,
+                );
+            } else {
+                prefetched_node_index = usize::MAX;
+                prefetched_node_end = 0;
+            }
         }
 
         results
@@ -248,6 +308,93 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
     /// Access the root node of the RTree for manual traversal.
     fn root(&self) -> Node<'_, N, Self> {
         Node::from_root(self)
+    }
+
+    /// Prefetch bounding box data and indices for upcoming nodes in the queue
+    /// This helps reduce cache misses by loading data before it's needed
+    #[inline]
+    fn prefetch_entire_node_with_end<T: IndexableNum>(
+        &self,
+        node_index: usize,
+        end: usize,
+        boxes: &[N],
+        indices: &[T],
+    ) {
+        if node_index >= boxes.len() {
+            return;
+        }
+        let boxes_begin = &boxes[node_index] as *const N;
+        let boxes_end = &boxes[end] as *const N;
+        self.prefetch_range(boxes_begin, boxes_end);
+
+        // Prefetch indices data using the range interface
+        let start_index = node_index >> 2; // node_index / 4
+        let indices_begin = &indices[start_index] as *const T;
+        self.prefetch_cache_line(indices_begin);
+    }
+
+    /// Prefetch memory range from addr_begin to addr_end (inclusive)
+    /// This efficiently prefetches data in the given range at cache line intervals
+    #[inline]
+    fn prefetch_range<T>(&self, addr_begin: *const T, addr_end: *const T) {
+        let cache_line_size = 64; // Typical cache line size in bytes
+
+        // Convert to usize for arithmetic
+        let begin_addr = addr_begin as usize;
+        let end_addr = addr_end as usize;
+        debug_assert!(begin_addr <= end_addr);
+
+        // Prefetch at cache line intervals
+        // No need for complex alignment - the CPU handles cache line alignment internally
+        let mut current_addr = begin_addr;
+        while current_addr <= end_addr {
+            self.prefetch_cache_line(current_addr as *const T);
+            current_addr += cache_line_size;
+        }
+    }
+
+    /// Prefetch a cache line containing the given memory address
+    #[inline]
+    fn prefetch_cache_line<T>(&self, addr: *const T) {
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            // ARM64 prefetch instruction: PRFM PLDL1KEEP, [addr]
+            // PLDL1KEEP = prefetch for load, L1 cache, temporal locality
+            std::arch::asm!(
+                "prfm pldl1keep, [{}]",
+                in(reg) addr,
+                options(readonly, nostack, preserves_flags)
+            );
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            // x86_64 prefetch instruction
+            std::arch::asm!(
+                "prefetcht0 [{}]",
+                in(reg) addr,
+                options(readonly, nostack, preserves_flags)
+            );
+        }
+
+        #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+        {
+            // For other architectures, we can use a compiler hint
+            // This doesn't generate prefetch instructions but may help with optimization
+            std::hint::black_box(unsafe { std::ptr::read_volatile(addr) });
+        }
+    }
+
+    /// Conservative prefetch using volatile reads
+    /// This is completely portable and works on stable Rust
+    /// The compiler may optimize this differently, but it's guaranteed to work
+    #[inline]
+    fn prefetch_cache_line_portable<T>(&self, addr: *const T) {
+        unsafe {
+            // Volatile read hints to the processor that we'll need this data soon
+            // This doesn't guarantee prefetch instructions but is completely portable
+            std::ptr::read_volatile(addr);
+        }
     }
 }
 
