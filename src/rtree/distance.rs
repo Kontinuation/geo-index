@@ -29,8 +29,9 @@ pub trait DistanceMetric<N: IndexableNum>: SimpleDistanceMetric<N> {
     /// neighbor searches. The returned distance should be a lower bound on the actual
     /// distance from the query geometry to any geometry contained within the bounding box.
     ///
-    /// The default implementation wraps the bounding box as a `Rect` and uses
-    /// `distance_to_geometry`. Implementations may override this for better performance.
+    /// The default implementation checks if the geometry is a Point, and if so, uses the
+    /// faster `distance_to_bbox` method. Otherwise, it wraps the bounding box as a `Rect`
+    /// and uses `distance_to_geometry`. Implementations may override this for better performance.
     fn distance_geometry_to_bbox(
         &self,
         geom: &Geometry<f64>,
@@ -39,17 +40,25 @@ pub trait DistanceMetric<N: IndexableNum>: SimpleDistanceMetric<N> {
         max_x: N,
         max_y: N,
     ) -> N {
-        let bbox = Rect::new(
-            coord! {
-                x: min_x.to_f64().unwrap_or(0.0),
-                y: min_y.to_f64().unwrap_or(0.0)
-            },
-            coord! {
-                x: max_x.to_f64().unwrap_or(0.0),
-                y: max_y.to_f64().unwrap_or(0.0)
-            },
-        );
-        self.distance_to_geometry(geom, &Geometry::Rect(bbox))
+        // Fast path for points: use distance_to_bbox directly
+        if let Geometry::Point(p) = geom {
+            let x = N::from_f64(p.x()).unwrap_or(N::zero());
+            let y = N::from_f64(p.y()).unwrap_or(N::zero());
+            self.distance_to_bbox(x, y, min_x, min_y, max_x, max_y)
+        } else {
+            // General case: wrap bbox as Rect and use distance_to_geometry
+            let bbox = Rect::new(
+                coord! {
+                    x: min_x.to_f64().unwrap_or(0.0),
+                    y: min_y.to_f64().unwrap_or(0.0)
+                },
+                coord! {
+                    x: max_x.to_f64().unwrap_or(0.0),
+                    y: max_y.to_f64().unwrap_or(0.0)
+                },
+            );
+            self.distance_to_geometry(geom, &Geometry::Rect(bbox))
+        }
     }
 }
 
