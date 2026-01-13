@@ -230,10 +230,14 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
         distance_metric: &M,
     ) -> Vec<u32> {
         let boxes = self.boxes();
+        if boxes.is_empty() {
+            return vec![];
+        }
+
         let indices = self.indices();
         let max_distance = max_distance.unwrap_or(distance_metric.max_distance());
 
-        let mut outer_node_index = Some(boxes.len() - 4);
+        let mut outer_node_index = boxes.len().checked_sub(4);
         let mut queue = BinaryHeap::new();
         let mut results: Vec<u32> = vec![];
 
@@ -401,10 +405,14 @@ pub trait RTreeIndex<N: IndexableNum>: Sized {
         accessor: &A,
     ) -> Vec<u32> {
         let boxes = self.boxes();
+        if boxes.is_empty() {
+            return vec![];
+        }
+
         let indices = self.indices();
         let max_distance = max_distance.unwrap_or(distance_metric.max_distance());
 
-        let mut outer_node_index = Some(boxes.len() - 4);
+        let mut outer_node_index = boxes.len().checked_sub(4);
         let mut queue = BinaryHeap::new();
         let mut results: Vec<u32> = vec![];
 
@@ -587,7 +595,6 @@ mod test {
             assert_eq!(results, expected);
         }
     }
-
     #[cfg(feature = "use-geo_0_31")]
     mod distance_metrics {
         use crate::rtree::distance::{EuclideanDistance, HaversineDistance};

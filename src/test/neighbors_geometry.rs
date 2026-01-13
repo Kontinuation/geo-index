@@ -738,3 +738,100 @@ fn test_elongated_query_polygon_bug() {
         );
     }
 }
+
+// =============================================================================
+// Empty tree tests
+// =============================================================================
+
+#[test]
+fn test_search_empty_tree_returns_empty() {
+    let builder = RTreeBuilder::<f64>::new(0);
+    let tree = builder.finish::<HilbertSort>();
+
+    let results = tree.search(0.0, 0.0, 100.0, 100.0);
+    assert!(results.is_empty());
+}
+
+#[test]
+fn test_neighbors_empty_tree_returns_empty() {
+    let builder = RTreeBuilder::<f64>::new(0);
+    let tree = builder.finish::<HilbertSort>();
+
+    let results = tree.neighbors(50.0, 50.0, None, None);
+    assert!(results.is_empty());
+
+    let results = tree.neighbors(50.0, 50.0, Some(10), None);
+    assert!(results.is_empty());
+
+    let results = tree.neighbors(50.0, 50.0, None, Some(100.0));
+    assert!(results.is_empty());
+}
+
+#[test]
+fn test_neighbors_coord_empty_tree_returns_empty() {
+    use geo_traits::CoordTrait;
+
+    let builder = RTreeBuilder::<f64>::new(0);
+    let tree = builder.finish::<HilbertSort>();
+
+    struct TestCoord {
+        x: f64,
+        y: f64,
+    }
+    impl CoordTrait for TestCoord {
+        type T = f64;
+        fn x(&self) -> f64 {
+            self.x
+        }
+        fn y(&self) -> f64 {
+            self.y
+        }
+        fn dim(&self) -> geo_traits::Dimensions {
+            geo_traits::Dimensions::Xy
+        }
+        fn nth_or_panic(&self, n: usize) -> Self::T {
+            match n {
+                0 => self.x,
+                1 => self.y,
+                _ => panic!("Invalid dimension"),
+            }
+        }
+    }
+
+    let coord = TestCoord { x: 50.0, y: 50.0 };
+    let results = tree.neighbors_coord(&coord, None, None);
+    assert!(results.is_empty());
+}
+
+#[test]
+fn test_neighbors_with_distance_empty_tree_returns_empty() {
+    let builder = RTreeBuilder::<f64>::new(0);
+    let tree = builder.finish::<HilbertSort>();
+
+    let metric = EuclideanDistance;
+    let results = tree.neighbors_with_distance(50.0, 50.0, None, None, &metric);
+    assert!(results.is_empty());
+
+    let results = tree.neighbors_with_distance(50.0, 50.0, Some(10), None, &metric);
+    assert!(results.is_empty());
+}
+
+#[test]
+fn test_neighbors_geometry_empty_tree_returns_empty() {
+    let builder = RTreeBuilder::<f64>::new(0);
+    let tree = builder.finish::<HilbertSort>();
+
+    let geometries: Vec<Geometry<f64>> = vec![];
+    let metric = EuclideanDistance;
+    let accessor = SliceGeometryAccessor::new(&geometries);
+    let query_geom = Geometry::Point(Point::new(50.0, 50.0));
+
+    let results = tree.neighbors_geometry(&query_geom, None, None, &metric, &accessor);
+    assert!(results.is_empty());
+
+    let results = tree.neighbors_geometry(&query_geom, Some(10), None, &metric, &accessor);
+    assert!(results.is_empty());
+
+    let results = tree.neighbors_geometry(&query_geom, None, Some(100.0), &metric, &accessor);
+    assert!(results.is_empty());
+}
