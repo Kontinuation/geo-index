@@ -135,6 +135,7 @@ fn bench_geometry_combination(
                         query_geom,
                         Some(config.k),
                         None,
+                        false,
                         &metric,
                         &accessor,
                     );
@@ -198,6 +199,7 @@ fn benchmark_point_polygon(c: &mut Criterion) {
                             query_geom,
                             Some(config.k),
                             None,
+                            false,
                             &metric,
                             &accessor,
                         );
@@ -239,6 +241,7 @@ fn benchmark_polygon_point(c: &mut Criterion) {
                             query_geom,
                             Some(config.k),
                             None,
+                            false,
                             &metric,
                             &accessor,
                         );
@@ -281,6 +284,7 @@ fn benchmark_polygon_polygon(c: &mut Criterion) {
                             query_geom,
                             Some(config.k),
                             None,
+                            false,
                             &metric,
                             &accessor,
                         );
@@ -314,7 +318,14 @@ fn benchmark_k_scaling(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("k", k), &k, |b, &k| {
             b.iter(|| {
                 for query_geom in &query_geometries {
-                    let _ = tree.neighbors_geometry(query_geom, Some(k), None, &metric, &accessor);
+                    let _ = tree.neighbors_geometry(
+                        query_geom,
+                        Some(k),
+                        None,
+                        false,
+                        &metric,
+                        &accessor,
+                    );
                 }
             })
         });
@@ -362,7 +373,14 @@ fn benchmark_comparison(c: &mut Criterion) {
     group.bench_function("neighbors_with_distance", |b| {
         b.iter(|| {
             for point in &query_points {
-                let _ = tree.neighbors_with_distance(point.x(), point.y(), Some(k), None, &metric);
+                let _ = tree.neighbors_with_distance(
+                    point.x(),
+                    point.y(),
+                    Some(k),
+                    None,
+                    false,
+                    &metric,
+                );
             }
         })
     });
@@ -371,7 +389,8 @@ fn benchmark_comparison(c: &mut Criterion) {
     group.bench_function("neighbors_geometry_point", |b| {
         b.iter(|| {
             for query_geom in &query_geometries {
-                let _ = tree.neighbors_geometry(query_geom, Some(k), None, &metric, &accessor);
+                let _ =
+                    tree.neighbors_geometry(query_geom, Some(k), None, false, &metric, &accessor);
             }
         })
     });

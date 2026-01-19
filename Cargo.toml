@@ -42,3 +42,8 @@ harness = false
 name = "distance"
 harness = false
 required-features = ["use-geo_0_31"]
+
+[[bench]]
+name = "neighbors_geometry"
+harness = false
+required-features = ["use-geo_0_31"]
